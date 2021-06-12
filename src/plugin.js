@@ -13,7 +13,9 @@ function plugin(globalOptions = {}) {
       const validation = new Validator(
         request,
         rules,
-        Object.keys(localOptions).length ? localOptions : globalOptions
+        Object.keys(localOptions).length
+          ? { ...globalOptions, ...localOptions }
+          : globalOptions
       )
 
       validation.fails()
