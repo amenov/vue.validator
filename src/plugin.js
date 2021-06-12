@@ -63,16 +63,20 @@ function plugin(globalOptions = {}) {
           delete errors[key]
         }
       }
+
+      $this.$forceUpdate()
     }
 
     // @HAS-ERROR
     function hasError(key) {
-      return Object.hasOwnProperty.call(errors, key)
+      return !!getError(key)
     }
 
     // @GET-ERROR
     function getError(key) {
-      return errors[key]
+      if (key) {
+        return eval('errors.' + key.replaceAll('.', '?.'))
+      }
     }
 
     // @RESET
@@ -86,13 +90,7 @@ function plugin(globalOptions = {}) {
       $this.$forceUpdate()
     }
 
-    return {
-      onCheck,
-      hasError,
-      getError,
-      run,
-      reset
-    }
+    return { onCheck, hasError, getError, run, reset }
   }
 
   return {
