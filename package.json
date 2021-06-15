@@ -26,6 +26,7 @@
     "@babel/preset-env": "^7.14.4"
   },
   "dependencies": {
-    "amenov.frontend.validator": "^2.0.0"
+    "amenov.frontend.validator": "^2.1.14",
+    "flat": "^5.0.2"
   }
 }

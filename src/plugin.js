@@ -1,19 +1,22 @@
 const Validator = require('amenov.frontend.validator')
+const flat = require('flat')
 
 function plugin(globalOptions = {}) {
   function initValidator({
     $this,
     request,
     rules,
-    errors,
+    errors = {},
     options: localOptions = {}
   }) {
     // @NEW-VALIDATOR
     function newValidator(request, rules) {
       const validation = new Validator(
         request,
-        rules,
-        Object.keys(localOptions).length ? localOptions : globalOptions
+        JSON.parse(JSON.stringify(rules)),
+        Object.keys(localOptions).length
+          ? Object.assign(globalOptions, localOptions)
+          : globalOptions
       )
 
       validation.fails()
@@ -25,11 +28,7 @@ function plugin(globalOptions = {}) {
     function run() {
       const validation = newValidator(request, rules)
 
-      for (const key in errors) {
-        if (Object.hasOwnProperty.call(errors, key)) {
-          delete errors[key]
-        }
-      }
+      clearErrors()
 
       if (validation.failed) {
         for (const key in validation.errors) {
@@ -44,48 +43,123 @@ function plugin(globalOptions = {}) {
       return validation.failed
     }
 
-    // @ON-CHECK
-    function onCheck(key) {
-      if (!key) return
+    // @CHECK
+    function check(flatKey, index) {
+      if (!flatKey) return
 
-      const rulesValue = rules[key]
+      const _flatRules = {}
+      const _flatRequest = {}
 
-      if (rulesValue) {
-        const validation = newValidator(request, {
-          [key]: rulesValue
-        })
+      const flatRulesEntries = Object.entries(flat(rules))
 
-        if (validation.failed) {
-          errors[key] = validation.errors[key]
-        } else {
-          delete errors[key]
+      for (const [key, val] of flatRulesEntries) {
+        if (key !== flatKey) continue
+
+        if (key.includes('$')) {
+          let [start, mainKey, otherKeys] = key.split(/\$|:object/)
+
+          start && (mainKey = start + mainKey)
+
+          for (const [key, val] of flatRulesEntries) {
+            if (mainKey !== key) continue
+
+            _flatRules[mainKey] = val
+
+            break
+          }
+
+          if (index === 0 || index) {
+            if (otherKeys) {
+              requestKey = `${mainKey}.${index}${otherKeys}`
+
+              for (const [key, val] of Object.entries(flat(request))) {
+                if (requestKey !== key) continue
+
+                _flatRequest[requestKey] = val
+
+                break
+              }
+            }
+          }
         }
+
+        _flatRules[key] = val
+
+        break
       }
-    }
 
-    // @HAS-ERROR
-    function hasError(key) {
-      return Object.hasOwnProperty.call(errors, key)
-    }
+      !Object.keys(_flatRequest).length &&
+        Object.assign(_flatRequest, flat(request))
 
-    // @GET-ERROR
-    function getError(key) {
-      return errors[key]
-    }
+      const validation = newValidator(
+        flat.unflatten(_flatRequest),
+        flat.unflatten(_flatRules)
+      )
 
-    // @RESET
-    function reset() {
-      for (const key in errors) {
-        if (Object.hasOwnProperty.call(errors, key)) {
-          delete errors[key]
+      const flatErrors = flat(errors)
+
+      if (validation.failed) {
+        const flatValidationErrors = flat(validation.errors)
+
+        clearErrors()
+
+        Object.assign(
+          errors,
+          flat.unflatten({ ...flatErrors, ...flatValidationErrors })
+        )
+      } else {
+        if (index === 0 || index) {
+          let [, mainKey, otherKeys] = flatKey.split(/\$|:object/)
+
+          otherKeys && (flatKey = `${mainKey}.${index}${otherKeys}`)
         }
+
+        for (const key in flatErrors) {
+          if (Object.hasOwnProperty.call(flatErrors, key) && key === flatKey) {
+            delete flatErrors[key]
+          }
+        }
+
+        clearErrors()
+
+        Object.assign(errors, flat.unflatten(flatErrors))
       }
 
       $this.$forceUpdate()
     }
 
+    // @HAS-ERROR
+    function hasError(key) {
+      return !!getError(key)
+    }
+
+    // @GET-ERROR
+    function getError(key) {
+      if (key) {
+        return eval(
+          'errors.' + key.replaceAll('.', '?.').replaceAll('[', '?.[')
+        )
+      }
+    }
+
+    // @CLEAR-ERRORS
+    function clearErrors() {
+      for (const key in errors) {
+        if (Object.hasOwnProperty.call(errors, key)) {
+          delete errors[key]
+        }
+      }
+    }
+
+    // @RESET
+    function reset() {
+      clearErrors()
+
+      $this.$forceUpdate()
+    }
+
     return {
-      onCheck,
+      check,
       hasError,
       getError,
       run,
