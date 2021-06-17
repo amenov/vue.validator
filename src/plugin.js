@@ -56,30 +56,39 @@ function plugin(globalOptions = {}) {
         if (key !== flatKey) continue
 
         if (key.includes('$')) {
-          let [start, mainKey, otherKeys] = key.split(/\$|:object/)
+          let stop
 
-          start && (mainKey = start + mainKey)
+          const flatRulesKey = key
+            .split('.')
+            .filter((k) => {
+              if (!stop) {
+                if (k.startsWith('$')) stop = true
+
+                return true
+              }
+            })
+            .join('.')
+            .replace('$', '')
 
           for (const [key, val] of flatRulesEntries) {
-            if (mainKey !== key) continue
+            if (flatRulesKey !== key) continue
 
-            _flatRules[mainKey] = val
+            _flatRules[flatRulesKey] = val
 
             break
           }
 
-          if (index === 0 || index) {
-            if (otherKeys) {
-              requestKey = `${mainKey}.${index}${otherKeys}`
+          const flatRequestKey = key
+            .split('.')
+            .map((k) => (k.startsWith('$') ? k.slice(1) + `.${index}` : k))
+            .join('.')
 
-              for (const [key, val] of Object.entries(flat(request))) {
-                if (requestKey !== key) continue
+          for (const [key, val] of Object.entries(flat(request))) {
+            if (flatRequestKey !== key) continue
 
-                _flatRequest[requestKey] = val
+            _flatRequest[flatRequestKey] = val
 
-                break
-              }
-            }
+            break
           }
         }
 
@@ -105,17 +114,23 @@ function plugin(globalOptions = {}) {
 
         Object.assign(
           errors,
-          flat.unflatten({ ...flatErrors, ...flatValidationErrors })
+          flat.unflatten(Object.assign(flatErrors, flatValidationErrors))
         )
       } else {
-        if (index === 0 || index) {
-          let [, mainKey, otherKeys] = flatKey.split(/\$|:object/)
-
-          otherKeys && (flatKey = `${mainKey}.${index}${otherKeys}`)
-        }
+        const flatErrorsKey = flatKey
+          .split('.')
+          .map((k) =>
+            k.startsWith('$')
+              ? k.slice(1) + (index === 0 || index ? `.${index}` : '')
+              : k
+          )
+          .join('.')
 
         for (const key in flatErrors) {
-          if (Object.hasOwnProperty.call(flatErrors, key) && key === flatKey) {
+          if (
+            Object.hasOwnProperty.call(flatErrors, key) &&
+            key === flatErrorsKey
+          ) {
             delete flatErrors[key]
           }
         }
